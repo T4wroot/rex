@@ -1,0 +1,19 @@
+# Go
+/rex-node/rex-node
+/rex-node/rex-node.exe
+/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

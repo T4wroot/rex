@@ -1,0 +1,20 @@
+# rex-node configuration
+# Copy to /etc/rex/config.yaml and edit
+
+# Secret token — all clients must send this to authenticate
+# Generate: openssl rand -hex 32
+token: "CHANGE_ME_USE_STRONG_RANDOM_TOKEN"
+
+# Port to listen on (default: 7443)
+port: 7443
+
+# TLS (recommended for production)
+tls: false
+# cert_file: /etc/rex/cert.pem
+# key_file:  /etc/rex/key.pem
+
+# Path to command allowlist
+allowlist: /etc/rex/allowlist.yaml
+
+# Log level: debug | info | warn | error
+log_level: info
