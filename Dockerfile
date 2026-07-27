@@ -1,5 +1,6 @@
 # Build stage
 FROM golang:1.21-alpine AS builder
+LABEL org.opencontainers.image.description="REX Node Daemon (Remote EXecution Protocol) for AI Agents"
 WORKDIR /app
 COPY rex-node/go.mod ./
 COPY rex-node/go.sum* ./
@@ -9,6 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o rex-node .
 
 # Final minimal alpine container
 FROM alpine:3.19
+LABEL org.opencontainers.image.description="REX Node Daemon (Remote EXecution Protocol) for AI Agents"
 RUN apk add --no-cache ca-certificates tzdata bash
 WORKDIR /app
 COPY --from=builder /app/rex-node /usr/local/bin/rex-node
