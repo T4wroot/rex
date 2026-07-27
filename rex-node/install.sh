@@ -34,10 +34,13 @@ mkdir -p /usr/local/bin /etc/rex
 
 # Stop existing running daemon if updating
 systemctl stop rex-node 2>/dev/null || true
+pkill -f rex-node 2>/dev/null || true
+rm -f /usr/local/bin/rex-node.tmp
 
-# Download pre-compiled binary
-curl -fsSL "https://github.com/T4wroot/rex/releases/download/v1.0.0/${BINARY_NAME}" -o /usr/local/bin/rex-node
-chmod +x /usr/local/bin/rex-node
+# Download pre-compiled binary safely to temp file first, then atomic move
+curl -fsSL "https://github.com/T4wroot/rex/releases/download/v1.0.0/${BINARY_NAME}" -o /usr/local/bin/rex-node.tmp
+chmod +x /usr/local/bin/rex-node.tmp
+mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
 
 # 2. Write Config
 cat > /etc/rex/config.yaml << EOF
