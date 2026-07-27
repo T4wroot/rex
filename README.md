@@ -11,33 +11,33 @@
 
 ---
 
-## ⚡ Quick Start & Installation
+## ⚡ Quick Start & One-Line Installation
 
-### Option A: Install via APT Package (`apt install`)
+### 1. Server Installation (`rex-node`)
 
-To install `rex-node` on any Ubuntu/Debian server using APT:
+Run this single command on any Linux server (Ubuntu, Debian, CentOS, etc.):
 
 ```bash
-# 1. Download and install the pre-built APT package (.deb)
-wget https://github.com/T4wroot/rex/releases/download/v1.0.0/rex-node_1.0.0_amd64.deb
-sudo apt install ./rex-node_1.0.0_amd64.deb
+curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash -s -- --token YOUR_SECRET_TOKEN
 ```
 
-Or run the single-line automated APT installer:
+*(This automatically downloads the binary, sets up `/etc/rex/config.yaml`, and starts a `systemd` background service on port 7443).*
+
+---
+
+### 2. Client Installation for AI Agents (`rex-client`)
+
+Install the REX Python SDK in your AI Agent environment:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
+pip install git+https://github.com/T4wroot/rex.git#subdirectory=rex-client
 ```
 
 ---
 
-### Option B: Run Official Docker Container (`ghcr.io`)
-
-Pull and run the official Docker image:
+### 3. Run via Official Docker Image (`ghcr.io`)
 
 ```bash
-docker pull ghcr.io/t4wroot/rex/rex-node:latest
-
 docker run -d \
   --name rex-node \
   --restart always \
@@ -47,38 +47,52 @@ docker run -d \
 
 ---
 
-### Option C: Python SDK for AI Agents (`pip install`)
+## 🚀 How AI Agents Use REX (Zero Terminal Overhead)
 
-Install the client SDK in your Python Agent:
-
-```bash
-pip install git+https://github.com/T4wroot/rex.git#subdirectory=rex-client
-```
-
----
-
-## 🚀 Usage in AI Agents
+### Persistent Connection (Sub-5ms Execution)
 
 ```python
 import asyncio
 from rex_client import REXPersistentClient
 
 async def main():
+    # Connect ONCE at agent startup (Background WebSocket Channel)
     agent = REXPersistentClient(host="167.172.102.14", token="YOUR_SECRET_TOKEN", port=7443)
     await agent.start()
 
-    # Fast execution (<5ms background RPC)
+    # Instant execution (<5ms background RPC)
     res = await agent.exec_fast("systemctl restart xray")
-    print(f"Result: {res.stdout}")
+    print(f"Status: {res.exit_code}, Output: {res.stdout}")
 
     # Fetch Hardware Metrics
     info = await agent.sysinfo_fast()
-    print(f"RAM: {info.mem_used_gb}GB / {info.mem_total_gb}GB")
+    print(f"RAM: {info.mem_used_gb}GB / {info.mem_total_gb}GB | Load: {info.load_1m}")
 
     await agent.stop()
 
 asyncio.run(main())
 ```
+
+---
+
+## 🛡️ 3-Tier Security Levels (`/etc/rex/allowlist.yaml`)
+
+REX supports 3 operational security modes:
+
+```yaml
+# Modes: "autonomous" | "review" | "allowlist"
+mode: "autonomous"
+
+# Protected Rules — ALWAYS enforced in ALL modes (including autonomous)
+denied_commands:
+  - "rm -rf /"
+  - "chmod -R 777 /"
+  - "mkfs"
+```
+
+1. **`autonomous` (Default):** Full agent freedom — runs commands instantly while enforcing absolute safety bans.
+2. **`review`:** Read-only inspection commands execute automatically; dangerous operations flag for human approval.
+3. **`allowlist`:** Strict mode — only pre-configured commands execute.
 
 ---
 
