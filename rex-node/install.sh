@@ -2,7 +2,7 @@
 # REX One-Line Super Installer (Linux / Ubuntu / Debian / CentOS)
 # Usage: curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
 
-set -euo pipefail
+set -eo pipefail
 
 TOKEN=""
 PORT="7443"
@@ -16,7 +16,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# If no token provided, generate a strong random token automatically
 if [[ -z "$TOKEN" ]]; then
   TOKEN=$(openssl rand -hex 16 2>/dev/null || date +%s | md5sum | head -c 32)
 fi
@@ -31,8 +30,12 @@ case "$ARCH" in
   *) echo "Unsupported Architecture: $ARCH"; exit 1 ;;
 esac
 
-# 1. Download pre-compiled binary directly from Releases
 mkdir -p /usr/local/bin /etc/rex
+
+# Stop existing running daemon if updating
+systemctl stop rex-node 2>/dev/null || true
+
+# Download pre-compiled binary
 curl -fsSL "https://github.com/T4wroot/rex/releases/download/v1.0.0/${BINARY_NAME}" -o /usr/local/bin/rex-node
 chmod +x /usr/local/bin/rex-node
 
@@ -56,7 +59,26 @@ denied_commands:
 EOF
 fi
 
-# 4. Setup Systemd Service
+# 4. Setup CLI helper tool `/usr/local/bin/rex`
+cat > /usr/local/bin/rex << 'EOF'
+#!/bin/bash
+case "$1" in
+  status)  systemctl status rex-node --no-pager ;;
+  start)   systemctl start rex-node ;;
+  stop)    systemctl stop rex-node ;;
+  restart) systemctl restart rex-node ;;
+  logs)    journalctl -u rex-node -f ;;
+  config)  cat /etc/rex/config.yaml ;;
+  token)   grep "token:" /etc/rex/config.yaml | awk '{print $2}' ;;
+  *)
+    echo "REX CLI Management Tool"
+    echo "Usage: rex {status|start|stop|restart|logs|config|token}"
+    ;;
+esac
+EOF
+chmod +x /usr/local/bin/rex
+
+# 5. Setup Systemd Service
 cat > /etc/systemd/system/rex-node.service << EOF
 [Unit]
 Description=REX Node Daemon
@@ -81,5 +103,8 @@ echo "===================================================="
 echo " ├─ Status:  active (running) on port ${PORT}"
 echo " └─ Token:   ${TOKEN}"
 echo "===================================================="
-echo " 💡 Copy the generated Token above into your AI Agent!"
+echo " 💡 Useful Commands:"
+echo "    • rex status   (Check node status)"
+echo "    • rex logs     (Stream live logs)"
+echo "    • rex token    (Print authentication token)"
 echo "===================================================="
