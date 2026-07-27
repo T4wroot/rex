@@ -26,7 +26,6 @@ type Server struct {
 	streamer  *Streamer
 }
 
-// NewServer creates the server
 func NewServer(cfg *Config, al *Allowlist) *Server {
 	return &Server{
 		cfg:       cfg,
@@ -36,7 +35,6 @@ func NewServer(cfg *Config, al *Allowlist) *Server {
 	}
 }
 
-// Start begins listening for connections
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rex", s.handleConnection)
@@ -54,7 +52,6 @@ func (s *Server) Start() error {
 	return http.ListenAndServe(addr, mux)
 }
 
-// handleConnection upgrades HTTP to WebSocket and handles the REX session
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -63,17 +60,16 @@ func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	log.Printf("[rex] new connection from %s", r.RemoteAddr)
+	log.Printf("[rex] client connected: %s", r.RemoteAddr)
 
 	if !s.doHandshake(conn) {
 		return
 	}
 
-	s.handleSession(conn)
-	log.Printf("[rex] connection closed from %s", r.RemoteAddr)
+	s.handleSession(conn, r.RemoteAddr)
+	log.Printf("[rex] client disconnected: %s", r.RemoteAddr)
 }
 
-// doHandshake validates the token and sends server info
 func (s *Server) doHandshake(conn *websocket.Conn) bool {
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
@@ -96,7 +92,7 @@ func (s *Server) doHandshake(conn *websocket.Conn) bool {
 
 	token, _ := msg["token"].(string)
 	if token != s.cfg.Token {
-		log.Printf("[rex] invalid token — connection rejected")
+		log.Printf("[rex] auth failed: invalid token")
 		conn.WriteJSON(map[string]interface{}{
 			"type":   "handshake_ack",
 			"status": "error",
@@ -117,20 +113,27 @@ func (s *Server) doHandshake(conn *websocket.Conn) bool {
 		"protocol":     "RXP/1.0",
 	})
 
-	log.Printf("[rex] client authenticated — node ready")
+	log.Printf("[rex] client authenticated (RXP/1.0 persistent session active)")
 	return true
 }
 
-// handleSession processes incoming RXP messages in a loop
-func (s *Server) handleSession(conn *websocket.Conn) {
+func (s *Server) handleSession(conn *websocket.Conn, remoteAddr string) {
 	var mu sync.Mutex
 	streams := make(map[string]context.CancelFunc)
+
+	// Set Pong handler to keep persistent channel alive
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Time{})
+		return nil
+	})
 
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				log.Printf("[rex] unexpected close: %v", err)
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				log.Printf("[rex] session ended gracefully by client (%s)", remoteAddr)
+			} else if websocket.IsUnexpectedCloseError(err) {
+				log.Printf("[rex] connection dropped: %v", err)
 			}
 			for _, cancel := range streams {
 				cancel()
@@ -140,7 +143,7 @@ func (s *Server) handleSession(conn *websocket.Conn) {
 
 		var msg map[string]interface{}
 		if err := json.Unmarshal(data, &msg); err != nil {
-			log.Printf("[rex] invalid JSON: %v", err)
+			log.Printf("[rex] invalid JSON frame: %v", err)
 			continue
 		}
 
@@ -181,7 +184,7 @@ func (s *Server) handleSession(conn *websocket.Conn) {
 			})
 
 		default:
-			log.Printf("[rex] unknown message type: %q", msgType)
+			log.Printf("[rex] unknown frame type: %q", msgType)
 			_ = sendJSON(conn, &mu, map[string]interface{}{
 				"type":  "error",
 				"id":    msgID,
@@ -219,7 +222,6 @@ func (s *Server) handleSysinfo(conn *websocket.Conn, mu sync.Locker, id string) 
 	_ = sendJSON(conn, mu, info)
 }
 
-// sendJSON thread-safely sends a JSON message over WebSocket
 func sendJSON(conn *websocket.Conn, mu interface{ Lock(); Unlock() }, v interface{}) error {
 	mu.Lock()
 	defer mu.Unlock()
