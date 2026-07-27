@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# REX One-Line Super Installer (Linux / Ubuntu / Debian)
-# Usage: curl -fsSL https://rexprotocol.dev/install.sh | bash -s -- --token YOUR_TOKEN
+# REX One-Line Super Installer (Linux / Ubuntu / Debian / CentOS)
+# Usage: curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
 
 set -euo pipefail
 
 TOKEN=""
 PORT="7443"
 
+# Parse optional args
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --token) TOKEN="$2"; shift 2 ;;
@@ -15,8 +16,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# If no token provided, generate a strong random token automatically
 if [[ -z "$TOKEN" ]]; then
-  TOKEN=$(openssl rand -hex 16 2>/dev/null || echo "rex_secret_token_$(date +%s)")
+  TOKEN=$(openssl rand -hex 16 2>/dev/null || date +%s | md5sum | head -c 32)
 fi
 
 echo "⚡ Installing REX Node Daemon..."
@@ -44,6 +46,7 @@ log_level: info
 EOF
 
 # 3. Write Default Allowlist (Autonomous Mode)
+if [[ ! -f /etc/rex/allowlist.yaml ]]; then
 cat > /etc/rex/allowlist.yaml << 'EOF'
 mode: "autonomous"
 denied_commands:
@@ -51,6 +54,7 @@ denied_commands:
   - "chmod -R 777 /"
   - "mkfs"
 EOF
+fi
 
 # 4. Setup Systemd Service
 cat > /etc/systemd/system/rex-node.service << EOF
@@ -71,6 +75,11 @@ systemctl daemon-reload
 systemctl enable --now rex-node
 
 echo ""
-echo "✅ REX Node installed and running successfully!"
+echo "===================================================="
+echo " ✅ REX Node installed and running successfully!"
+echo "===================================================="
 echo " ├─ Status:  active (running) on port ${PORT}"
 echo " └─ Token:   ${TOKEN}"
+echo "===================================================="
+echo " 💡 Copy the generated Token above into your AI Agent!"
+echo "===================================================="

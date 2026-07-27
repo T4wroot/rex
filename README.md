@@ -15,13 +15,18 @@
 
 ### 1. Server Installation (`rex-node`)
 
-Run this single command on any Linux server (Ubuntu, Debian, CentOS, etc.):
+Run this single zero-config command on any Linux server (Ubuntu, Debian, CentOS, etc.):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash -s -- --token YOUR_SECRET_TOKEN
+curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
 ```
 
-*(This automatically downloads the binary, sets up `/etc/rex/config.yaml`, and starts a `systemd` background service on port 7443).*
+*(This automatically generates a secure token, downloads the binary, sets up `/etc/rex/config.yaml`, and starts a `systemd` background service on port 7443).*
+
+Optionally, you can specify your own token:
+```bash
+curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash -s -- --token YOUR_TOKEN
+```
 
 ---
 
@@ -49,15 +54,13 @@ docker run -d \
 
 ## 🚀 How AI Agents Use REX (Zero Terminal Overhead)
 
-### Persistent Connection (Sub-5ms Execution)
-
 ```python
 import asyncio
 from rex_client import REXPersistentClient
 
 async def main():
     # Connect ONCE at agent startup (Background WebSocket Channel)
-    agent = REXPersistentClient(host="167.172.102.14", token="YOUR_SECRET_TOKEN", port=7443)
+    agent = REXPersistentClient(host="167.172.102.14", token="YOUR_TOKEN", port=7443)
     await agent.start()
 
     # Instant execution (<5ms background RPC)
