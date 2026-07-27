@@ -17,7 +17,7 @@ type ExecResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
-// Executor runs shell commands safely via the allowlist
+// Executor runs shell commands safely via security modes
 type Executor struct {
 	allowlist *Allowlist
 }
@@ -27,12 +27,13 @@ func NewExecutor(al *Allowlist) *Executor {
 	return &Executor{allowlist: al}
 }
 
-// Run executes a command if it is allowed
+// Run executes a command if permitted by security mode
 func (e *Executor) Run(command string, timeoutSecs int) ExecResult {
-	if !e.allowlist.IsCommandAllowed(command) {
+	allowed, reason := e.allowlist.IsCommandAllowed(command)
+	if !allowed {
 		return ExecResult{
 			ExitCode: -1,
-			Error:    "command not allowed by rex policy",
+			Error:    reason,
 		}
 	}
 
@@ -81,7 +82,6 @@ func (e *Executor) Run(command string, timeoutSecs int) ExecResult {
 	return result
 }
 
-// splitCommand splits a command string into args, respecting quoted strings
 func splitCommand(command string) []string {
 	var args []string
 	var current strings.Builder

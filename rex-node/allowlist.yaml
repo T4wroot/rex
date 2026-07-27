@@ -1,63 +1,26 @@
-# REX Node Command Allowlist
-# Defines exactly which commands agents may execute.
-# Wildcards (*) supported at end of pattern.
-# denied_commands takes priority over allowed_commands.
+# REX Node Security Configuration
+# Modes:
+#   1. "allowlist"  -> Strict mode: Only explicitly listed commands in allowed_commands can run.
+#   2. "review"     -> Semi-Autonomous mode: Safe read-only commands run instantly; risky ones flag for review.
+#   3. "autonomous" -> Full Autonomous mode: ALL commands run freely EXCEPT explicit destructive bans in denied_commands.
 
+mode: "autonomous"
+
+# Explicit allowed commands (Used primarily when mode: "allowlist" or "review")
 allowed_commands:
-  # Xray / x-ui
   - "systemctl restart xray"
-  - "systemctl start xray"
-  - "systemctl stop xray"
   - "systemctl status xray"
-  - "systemctl restart x-ui"
-  - "systemctl start x-ui"
-  - "systemctl stop x-ui"
-  - "systemctl status x-ui"
-
-  # Docker
   - "docker restart *"
-  - "docker start *"
-  - "docker stop *"
-  - "docker ps"
-  - "docker stats --no-stream"
-
-  # Nginx
-  - "systemctl reload nginx"
-  - "systemctl restart nginx"
-  - "nginx -t"
-
-  # System info (read-only)
   - "df -h"
-  - "df -hT"
   - "free -m"
-  - "free -h"
-  - "uptime"
-  - "uname -a"
-  - "hostname"
-  - "ip addr"
-  - "ss -tlnp"
-
-  # Logs
-  - "journalctl -u xray --no-pager -n *"
-  - "journalctl -u x-ui --no-pager -n *"
-  - "journalctl -u nginx --no-pager -n *"
-  - "journalctl --no-pager -n *"
 
 allowed_paths:
-  - /var/log/xray/
-  - /var/log/nginx/
-  - /var/log/x-ui/
+  - /var/log/
 
+# Absolute Deny List (Protected rules — ALWAYS enforced in ALL modes including "autonomous")
 denied_commands:
-  - "rm -rf"
-  - "passwd"
-  - "iptables -F"
-  - "shutdown"
-  - "reboot"
-  - "init 0"
-  - "init 6"
+  - "rm -rf /"
+  - "rm -rf /boot"
   - "mkfs"
-  - "dd if="
-  - "chmod 777"
-  - "sudo su"
-  - "su -"
+  - "dd if=/dev/zero"
+  - "chmod -R 777 /"

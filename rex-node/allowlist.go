@@ -10,14 +10,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Allowlist controls which commands and paths are permitted
+// SecurityLevel defines the operating mode of rex-node
+type SecurityLevel string
+
+const (
+	LevelAllowlist    SecurityLevel = "allowlist"     // Strict: only explicitly allowed commands
+	LevelReview       SecurityLevel = "review"        // Review: allow read-only + safe, require confirmation for dangerous
+	LevelAutonomous   SecurityLevel = "autonomous"    // Full: execute everything except explicit destructive bans
+)
+
 type Allowlist struct {
-	AllowedCommands []string `yaml:"allowed_commands"`
-	AllowedPaths    []string `yaml:"allowed_paths"`
-	DeniedCommands  []string `yaml:"denied_commands"`
+	Mode            SecurityLevel `yaml:"mode"` // "allowlist" | "review" | "autonomous"
+	AllowedCommands []string      `yaml:"allowed_commands"`
+	AllowedPaths    []string      `yaml:"allowed_paths"`
+	DeniedCommands  []string      `yaml:"denied_commands"`
 }
 
-// LoadAllowlist reads the allowlist YAML file
 func LoadAllowlist(path string) (*Allowlist, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -29,37 +37,68 @@ func LoadAllowlist(path string) (*Allowlist, error) {
 		return nil, fmt.Errorf("cannot parse allowlist: %w", err)
 	}
 
-	log.Printf("[rex] allowlist loaded — %d allowed, %d denied",
-		len(al.AllowedCommands), len(al.DeniedCommands))
+	// Default to allowlist mode if unassigned
+	if al.Mode == "" {
+		al.Mode = LevelAllowlist
+	}
+
+	log.Printf("[rex-security] Mode: %s | Allowed: %d | Denied: %d",
+		strings.ToUpper(string(al.Mode)), len(al.AllowedCommands), len(al.DeniedCommands))
 	return &al, nil
 }
 
-// IsCommandAllowed checks if a command is permitted.
-// Denied list takes priority over allowed list.
-func (al *Allowlist) IsCommandAllowed(command string) bool {
+// IsCommandAllowed evaluates permissions based on mode
+func (al *Allowlist) IsCommandAllowed(command string) (bool, string) {
 	cmd := strings.TrimSpace(command)
 
-	// Denied list takes priority
+	// Denied commands are ALWAYS blocked regardless of mode
 	for _, denied := range al.DeniedCommands {
 		if matchPattern(denied, cmd) {
-			log.Printf("[rex] DENIED: %q (rule: %q)", cmd, denied)
-			return false
+			log.Printf("[rex-security] DENIED: %q (matched deny rule: %q)", cmd, denied)
+			return false, fmt.Sprintf("command matches absolute deny rule: %s", denied)
 		}
 	}
 
-	// Check allowed list
-	for _, allowed := range al.AllowedCommands {
-		if matchPattern(allowed, cmd) {
-			return true
-		}
-	}
+	switch al.Mode {
 
-	log.Printf("[rex] DENIED: %q (not in allowlist)", cmd)
-	return false
+	case LevelAutonomous:
+		// Autonomous mode: Execute EVERYTHING unless explicitly in denied_commands
+		log.Printf("[rex-security] AUTONOMOUS ALLOW: %q", cmd)
+		return true, ""
+
+	case LevelReview:
+		// Review mode: Allow standard/read-only commands; flag unknown/dangerous for review
+		if al.isReadOnlyOrSafe(cmd) {
+			return true, ""
+		}
+		// If command is explicitly allowed, run it
+		for _, allowed := range al.AllowedCommands {
+			if matchPattern(allowed, cmd) {
+				return true, ""
+			}
+		}
+		log.Printf("[rex-security] REVIEW REQUIRED: %q", cmd)
+		return false, "command requires human review/approval under 'review' mode"
+
+	case LevelAllowlist:
+		fallthrough
+	default:
+		// Strict allowlist mode
+		for _, allowed := range al.AllowedCommands {
+			if matchPattern(allowed, cmd) {
+				return true, ""
+			}
+		}
+		log.Printf("[rex-security] ALLOWLIST DENIED: %q", cmd)
+		return false, "command not in explicit allowlist"
+	}
 }
 
-// IsPathAllowed checks if a file path is permitted for streaming
 func (al *Allowlist) IsPathAllowed(path string) bool {
+	if al.Mode == LevelAutonomous {
+		return true
+	}
+
 	for _, allowed := range al.AllowedPaths {
 		allowedDir := filepath.Clean(allowed)
 		cleanPath := filepath.Clean(path)
@@ -67,11 +106,23 @@ func (al *Allowlist) IsPathAllowed(path string) bool {
 			return true
 		}
 	}
-	log.Printf("[rex] DENIED path: %q", path)
 	return false
 }
 
-// matchPattern supports trailing wildcard: "docker restart *"
+// isReadOnlyOrSafe identifies common safe inspection commands for 'review' mode
+func (al *Allowlist) isReadOnlyOrSafe(cmd string) bool {
+	safePrefixes := []string{
+		"ls", "cat", "df", "free", "uptime", "uname", "hostname", "ip",
+		"systemctl status", "docker ps", "journalctl", "top", "htop", "ss", "ps",
+	}
+	for _, p := range safePrefixes {
+		if strings.HasPrefix(cmd, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func matchPattern(pattern, command string) bool {
 	if pattern == command {
 		return true
