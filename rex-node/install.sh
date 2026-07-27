@@ -41,7 +41,7 @@ pkill -f rex-node 2>/dev/null || true
 rm -f /usr/local/bin/rex-node.tmp
 
 # Download pre-compiled binary safely to temp file first, then atomic move
-curl -fsSL "https://github.com/T4wroot/rex/releases/download/v1.0.0/${BINARY_NAME}" -o /usr/local/bin/rex-node.tmp
+curl -fsSL "https://github.com/T4wroot/rex/releases/download/v1.0.1/${BINARY_NAME}" -o /usr/local/bin/rex-node.tmp
 chmod +x /usr/local/bin/rex-node.tmp
 mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
 
