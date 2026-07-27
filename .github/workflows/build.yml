@@ -20,6 +20,11 @@ jobs:
         with:
           go-version: '1.21'
 
+      - name: Tidy Go Modules
+        run: |
+          cd rex-node
+          go mod tidy
+
       - name: Build Linux amd64
         run: |
           cd rex-node
