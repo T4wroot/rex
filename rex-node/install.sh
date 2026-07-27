@@ -2,7 +2,7 @@
 # REX One-Line Super Installer (Linux / Ubuntu / Debian / CentOS)
 # Usage: curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
 
-set -eo pipefail
+set -e
 
 TOKEN=""
 PORT="7443"
@@ -17,7 +17,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TOKEN" ]]; then
-  TOKEN=$(openssl rand -hex 16 2>/dev/null || echo "rex_secret_token_$(date +%s)")
+  TOKEN=$(openssl rand -hex 16 2>/dev/null || date +%s | md5sum | head -c 32)
 fi
 
 echo "⚡ Installing REX Node Daemon..."
@@ -40,8 +40,9 @@ systemctl stop rex-node 2>/dev/null || true
 pkill -f rex-node 2>/dev/null || true
 rm -f /usr/local/bin/rex-node.tmp
 
-# Download pre-compiled binary safely to temp file first, then atomic move
-curl -fsSL "https://github.com/T4wroot/rex/releases/download/v1.0.1/${BINARY_NAME}" -o /usr/local/bin/rex-node.tmp
+# Download pre-compiled binary safely via GitHub Release redirects
+DOWNLOAD_URL="https://github.com/T4wroot/rex/releases/download/v1.0.1/${BINARY_NAME}"
+curl -L -f -s -S "$DOWNLOAD_URL" -o /usr/local/bin/rex-node.tmp
 chmod +x /usr/local/bin/rex-node.tmp
 mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
 
