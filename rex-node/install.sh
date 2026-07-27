@@ -30,6 +30,9 @@ case "$ARCH" in
   *) echo "Unsupported Architecture: $ARCH"; exit 1 ;;
 esac
 
+# Detect public IP address of the server
+SERVER_IP=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || hostname -I | awk '{print $1}')
+
 mkdir -p /usr/local/bin /etc/rex
 
 # Stop existing running daemon if updating
@@ -65,6 +68,7 @@ fi
 # 4. Setup CLI helper tool `/usr/local/bin/rex`
 cat > /usr/local/bin/rex << 'EOF'
 #!/bin/bash
+SERVER_IP=$(curl -s -4 ifconfig.me || hostname -I | awk '{print $1}')
 case "$1" in
   status)  systemctl status rex-node --no-pager ;;
   start)   systemctl start rex-node ;;
@@ -73,9 +77,16 @@ case "$1" in
   logs)    journalctl -u rex-node -f ;;
   config)  cat /etc/rex/config.yaml ;;
   token)   grep "token:" /etc/rex/config.yaml | awk '{print $2}' ;;
+  ip)      echo "$SERVER_IP" ;;
+  info)
+    TOKEN=$(grep "token:" /etc/rex/config.yaml | awk '{print $2}')
+    echo "Server IP: $SERVER_IP"
+    echo "Port:      7443"
+    echo "Token:     $TOKEN"
+    ;;
   *)
     echo "REX CLI Management Tool"
-    echo "Usage: rex {status|start|stop|restart|logs|config|token}"
+    echo "Usage: rex {status|start|stop|restart|logs|config|token|ip|info}"
     ;;
 esac
 EOF
@@ -103,11 +114,10 @@ echo ""
 echo "===================================================="
 echo " ✅ REX Node installed and running successfully!"
 echo "===================================================="
-echo " ├─ Status:  active (running) on port ${PORT}"
-echo " └─ Token:   ${TOKEN}"
+echo " ├─ Server IP: ${SERVER_IP}"
+echo " ├─ Port:      ${PORT}"
+echo " └─ Token:     ${TOKEN}"
 echo "===================================================="
-echo " 💡 Useful Commands:"
-echo "    • rex status   (Check node status)"
-echo "    • rex logs     (Stream live logs)"
-echo "    • rex token    (Print authentication token)"
+echo " 💡 Copy & Paste to your AI Agent in new chat:"
+echo "    IP: ${SERVER_IP} | Token: ${TOKEN}"
 echo "===================================================="
