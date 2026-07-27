@@ -1,8 +1,10 @@
-name: Build & Release REX Node
+name: Build & Release REX
 
 on:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -28,15 +30,61 @@ jobs:
       - name: Build Linux amd64
         run: |
           cd rex-node
-          GOOS=linux GOARCH=amd64 go build -v -o ../dist/rex-node-linux-amd64 .
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -v -o ../dist/rex-node-linux-amd64 .
 
       - name: Build Linux arm64
         run: |
           cd rex-node
-          GOOS=linux GOARCH=arm64 go build -v -o ../dist/rex-node-linux-arm64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -v -o ../dist/rex-node-linux-arm64 .
+
+      - name: Build Windows amd64
+        run: |
+          cd rex-node
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -v -o ../dist/rex-node-windows-amd64.exe .
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: rex-node-binaries
           path: dist/
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rex-node-binaries
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: REX Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/rex-node-linux-amd64
+            dist/rex-node-linux-arm64
+            dist/rex-node-windows-amd64.exe
+          body: |
+            ## ⚡ REX (Remote EXecution Protocol) Release
+
+            ### 🚀 Binaries Included:
+            - **Linux amd64:** `rex-node-linux-amd64`
+            - **Linux arm64:** `rex-node-linux-arm64`
+            - **Windows amd64:** `rex-node-windows-amd64.exe`
+
+            ### 🛠️ One-Line Server Installer:
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash -s -- --token YOUR_TOKEN
+            ```
