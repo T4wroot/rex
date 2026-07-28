@@ -11,14 +11,9 @@
 
 ---
 
-## 🌐 زبان / Language
-- [English](#english-documentation)
-- [فارسی (Persian)](#راهنمای-فارسی)
+> 🇮🇷 **راهنمای فارسی:** برای مطالعه راهنمای کامل به زبان فارسی، به برگه [README_FA.md](README_FA.md) مراجعه کنید.
 
 ---
-
-<a name="english-documentation"></a>
-# 🇬🇧 English Documentation
 
 ## 💡 What is REX?
 
@@ -92,102 +87,16 @@ asyncio.run(main())
 
 ---
 
-<hr />
+## 🤝 Contributing & Community Proposals
 
-<a name="راهنمای-فارسی"></a>
-# 🇮🇷 راهنمای فارسی (Persian Documentation)
+We welcome contributions, feature proposals, and feedback from the community!
 
-<div dir="rtl" style="font-family: 'Vazirmatn', sans-serif; line-height: 2.0; text-align: right;">
-
-## 💡 پروتکل REX چیست؟
-
-**REX** یک پروتکل ارتباطی امن و فوق‌العاده سریع بین **AI Agentها** (مانند هرمس، آنتی‌گریویتی و سایر ایجنت‌های هوشمند) و **سرورهای لینوکس** است که جایگزین وابستگی به SSH و ترمینال‌های سنتی می‌شود.
-
-### ⚡ چرا REX به جای SSH؟
-- **سرعت پاسخگویی زیر ۵ میلی‌ثانیه:** حذف دست دادن‌های سنگین SSH و TTY shell.
-- **ارتباط زنده پس‌زمینه (Persistent Channel):** اتصال یک‌باره برقرار می‌ماند و پینگ/پونگ پس‌زمینه آن را زنده نگه می‌دارد.
-- **۳ سطح دسترسی امنیتی دائم و آنی:** پشتیبانی از مودهای `autonomous` (خودمختار)، `review` (بازبینی) و `allowlist` (لیست سفید).
+### How to Contribute:
+- **Propose Ideas & Report Issues:** Open a new issue in [GitHub Issues](https://github.com/T4wroot/rex/issues).
+- **Code Contributions:** Fork the repository, create a branch, and submit a Pull Request.
+- **Language SDKs:** Help build client SDKs for Node.js, Rust, or Go.
 
 ---
 
-## ⚡ نصب و راه‌اندازی سریع
-
-### ۱. نصب روی سرور لینوکس (`rex-node`)
-
-تنها با اجرای این تک‌دستور روی سرور (Ubuntu, Debian, CentOS):
-
-<div dir="ltr" style="background:#161b22; color:#e6edf3; padding:12px; border-radius:8px; border-left:4px solid #58a6ff; font-family:Consolas, monospace; font-size:15px; text-align:left;">
-curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
-</div>
-
----
-
-### ۲. تغییر آنی سطح دسترسی با ابزار CLI (`rex mode`)
-
-روی سرور می‌توانید سطح دسترسی ایجنت را آنی تغییر دهید:
-
-<div dir="ltr" style="background:#161b22; color:#e6edf3; padding:12px; border-radius:8px; border-left:4px solid #58a6ff; font-family:Consolas, monospace; font-size:15px; text-align:left;">
-
-# مشاهده مود فعلی
-rex mode
-
-# تغییر به حالت خودمختار کامل (آزادی عمل ایجنت با مسدودی دستورات مخرب)
-rex mode autonomous
-
-# تغییر به حالت بازبینی (دستورات خواندنی آزاد، تغییردهنده مسدود)
-rex mode review
-
-# تغییر به حالت لیست سفید سخت‌گیرانه
-rex mode allowlist
-
-</div>
-
----
-
-### ۳. نصب برای ایجنت پایتون (`rex-client`)
-
-<div dir="ltr" style="background:#161b22; color:#e6edf3; padding:12px; border-radius:8px; border-left:4px solid #58a6ff; font-family:Consolas, monospace; font-size:15px; text-align:left;">
-pip install git+https://github.com/T4wroot/rex.git#subdirectory=rex-client
-</div>
-
----
-
-## 🛠️ دستورات کاربردی ابزار CLI در سرور (`rex`)
-
-<table dir="rtl" style="width:100%; border-collapse:collapse; text-align:right; direction:rtl;">
-<thead>
-<tr style="background:#2d2d2d;">
-<th style="padding:10px; border:1px solid #444;">دستور</th>
-<th style="padding:10px; border:1px solid #444;">توضیح عملکرد</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="padding:10px; border:1px solid #444;"><code>rex info</code></td>
-<td style="padding:10px; border:1px solid #444;">چاپ مشخصات كامل IP سرور، پورت، مود و توکن امنیتی</td>
-</tr>
-<tr>
-<td style="padding:10px; border:1px solid #444;"><code>rex mode autonomous</code></td>
-<td style="padding:10px; border:1px solid #444;">تغییر آنی سطح دسترسی به خودمختار کامل</td>
-</tr>
-<tr>
-<td style="padding:10px; border:1px solid #444;"><code>rex status</code></td>
-<td style="padding:10px; border:1px solid #444;">مشاهده وضعیت زنده دیمون سرور</td>
-</tr>
-<tr>
-<td style="padding:10px; border:1px solid #444;"><code>rex logs</code></td>
-<td style="padding:10px; border:1px solid #444;">مشاهده آنلاین لاگ‌های اتصال ایجنت</td>
-</tr>
-<tr>
-<td style="padding:10px; border:1px solid #444;"><code>rex uninstall</code></td>
-<td style="padding:10px; border:1px solid #444;">حذف کامل و بی‌اثر ساختن REX از روی سرور</td>
-</tr>
-</tbody>
-</table>
-
----
-
-## 📄 لایسنس
-پروژه REX تحت لایسنس **MIT** منتشر شده است.
-
-</div>
+## 📄 License
+This project is licensed under the **MIT License**.
