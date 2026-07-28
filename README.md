@@ -11,28 +11,55 @@
 
 ---
 
-## ⚡ Quick Start & One-Line Installation
+## 🌐 زبان / Language
+- [English](#english-documentation)
+- [فارسی (Persian)](#راهنمای-فارسی)
+
+---
+
+<a name="english-documentation"></a>
+# 🇬🇧 English Documentation
+
+## 💡 What is REX?
+
+**REX** (Remote EXecution Protocol) is an open-source, agent-native infrastructure control protocol designed specifically for AI Agents (such as Hermes, Antigravity, and autonomous LLM agents) to observe, manage, and execute commands on remote servers **without relying on SSH sessions, terminal emulators, or interactive shell overhead.**
+
+### ⚡ Why REX over SSH?
+- **Sub-5ms Latency:** Zero SSH handshake or TTY allocation overhead. Commands run via native in-memory RPC frames.
+- **Persistent Channel (`REXPersistentClient`):** Keeps a single background WebSocket connection open with automatic keep-alive ping/pong.
+- **3-Tier Security Modes:** Choose between `autonomous`, `review`, and `allowlist` security levels dynamically.
+
+---
+
+## ⚡ Quick Start & Installation
 
 ### 1. Server Installation (`rex-node`)
 
-Run this single zero-config command on any Linux server (Ubuntu, Debian, CentOS, etc.):
+Run this single zero-config command on any Linux server:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
 ```
 
-*(This automatically generates a secure token, downloads the binary, sets up `/etc/rex/config.yaml`, and starts a `systemd` background service on port 7443).*
+### 2. Manage Security Modes via CLI (`rex mode`)
 
-Optionally, you can specify your own token:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash -s -- --token YOUR_TOKEN
+# Check current security mode
+rex mode
+
+# Switch to Autonomous Mode (Full Agent Freedom)
+rex mode autonomous
+
+# Switch to Review Mode (Read-only Auto, Dangerous Blocked)
+rex mode review
+
+# Switch to Strict Allowlist Mode
+rex mode allowlist
 ```
 
 ---
 
-### 2. Client Installation for AI Agents (`rex-client`)
-
-Install the REX Python SDK in your AI Agent environment:
+### 3. Client Installation for AI Agents (`rex-client`)
 
 ```bash
 pip install git+https://github.com/T4wroot/rex.git#subdirectory=rex-client
@@ -40,30 +67,17 @@ pip install git+https://github.com/T4wroot/rex.git#subdirectory=rex-client
 
 ---
 
-### 3. Run via Official Docker Image (`ghcr.io`)
-
-```bash
-docker run -d \
-  --name rex-node \
-  --restart always \
-  -p 7443:7443 \
-  ghcr.io/t4wroot/rex/rex-node:latest
-```
-
----
-
-## 🚀 How AI Agents Use REX (Zero Terminal Overhead)
+## 🚀 Python Usage in AI Agents
 
 ```python
 import asyncio
 from rex_client import REXPersistentClient
 
 async def main():
-    # Connect ONCE at agent startup (Background WebSocket Channel)
-    agent = REXPersistentClient(host="167.172.102.14", token="YOUR_TOKEN", port=7443)
+    agent = REXPersistentClient(host="80.253.254.207", token="YOUR_TOKEN", port=7443)
     await agent.start()
 
-    # Instant execution (<5ms background RPC)
+    # Instant Execution (<5ms)
     res = await agent.exec_fast("systemctl restart xray")
     print(f"Status: {res.exit_code}, Output: {res.stdout}")
 
@@ -78,26 +92,102 @@ asyncio.run(main())
 
 ---
 
-## 🛡️ 3-Tier Security Levels (`/etc/rex/allowlist.yaml`)
+<hr />
 
-REX supports 3 operational security modes:
+<a name="راهنمای-فارسی"></a>
+# 🇮🇷 راهنمای فارسی (Persian Documentation)
 
-```yaml
-# Modes: "autonomous" | "review" | "allowlist"
-mode: "autonomous"
+<div dir="rtl" style="font-family: 'Vazirmatn', sans-serif; line-height: 2.0; text-align: right;">
 
-# Protected Rules — ALWAYS enforced in ALL modes (including autonomous)
-denied_commands:
-  - "rm -rf /"
-  - "chmod -R 777 /"
-  - "mkfs"
-```
+## 💡 پروتکل REX چیست؟
 
-1. **`autonomous` (Default):** Full agent freedom — runs commands instantly while enforcing absolute safety bans.
-2. **`review`:** Read-only inspection commands execute automatically; dangerous operations flag for human approval.
-3. **`allowlist`:** Strict mode — only pre-configured commands execute.
+**REX** یک پروتکل ارتباطی امن و فوق‌العاده سریع بین **AI Agentها** (مانند هرمس، آنتی‌گریویتی و سایر ایجنت‌های هوشمند) و **سرورهای لینوکس** است که جایگزین وابستگی به SSH و ترمینال‌های سنتی می‌شود.
+
+### ⚡ چرا REX به جای SSH؟
+- **سرعت پاسخگویی زیر ۵ میلی‌ثانیه:** حذف دست دادن‌های سنگین SSH و TTY shell.
+- **ارتباط زنده پس‌زمینه (Persistent Channel):** اتصال یک‌باره برقرار می‌ماند و پینگ/پونگ پس‌زمینه آن را زنده نگه می‌دارد.
+- **۳ سطح دسترسی امنیتی دائم و آنی:** پشتیبانی از مودهای `autonomous` (خودمختار)، `review` (بازبینی) و `allowlist` (لیست سفید).
 
 ---
 
-## 📄 License
-This project is licensed under the **MIT License**.
+## ⚡ نصب و راه‌اندازی سریع
+
+### ۱. نصب روی سرور لینوکس (`rex-node`)
+
+تنها با اجرای این تک‌دستور روی سرور (Ubuntu, Debian, CentOS):
+
+<div dir="ltr" style="background:#161b22; color:#e6edf3; padding:12px; border-radius:8px; border-left:4px solid #58a6ff; font-family:Consolas, monospace; font-size:15px; text-align:left;">
+curl -fsSL https://raw.githubusercontent.com/T4wroot/rex/master/rex-node/install.sh | bash
+</div>
+
+---
+
+### ۲. تغییر آنی سطح دسترسی با ابزار CLI (`rex mode`)
+
+روی سرور می‌توانید سطح دسترسی ایجنت را آنی تغییر دهید:
+
+<div dir="ltr" style="background:#161b22; color:#e6edf3; padding:12px; border-radius:8px; border-left:4px solid #58a6ff; font-family:Consolas, monospace; font-size:15px; text-align:left;">
+
+# مشاهده مود فعلی
+rex mode
+
+# تغییر به حالت خودمختار کامل (آزادی عمل ایجنت با مسدودی دستورات مخرب)
+rex mode autonomous
+
+# تغییر به حالت بازبینی (دستورات خواندنی آزاد، تغییردهنده مسدود)
+rex mode review
+
+# تغییر به حالت لیست سفید سخت‌گیرانه
+rex mode allowlist
+
+</div>
+
+---
+
+### ۳. نصب برای ایجنت پایتون (`rex-client`)
+
+<div dir="ltr" style="background:#161b22; color:#e6edf3; padding:12px; border-radius:8px; border-left:4px solid #58a6ff; font-family:Consolas, monospace; font-size:15px; text-align:left;">
+pip install git+https://github.com/T4wroot/rex.git#subdirectory=rex-client
+</div>
+
+---
+
+## 🛠️ دستورات کاربردی ابزار CLI در سرور (`rex`)
+
+<table dir="rtl" style="width:100%; border-collapse:collapse; text-align:right; direction:rtl;">
+<thead>
+<tr style="background:#2d2d2d;">
+<th style="padding:10px; border:1px solid #444;">دستور</th>
+<th style="padding:10px; border:1px solid #444;">توضیح عملکرد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="padding:10px; border:1px solid #444;"><code>rex info</code></td>
+<td style="padding:10px; border:1px solid #444;">چاپ مشخصات كامل IP سرور، پورت، مود و توکن امنیتی</td>
+</tr>
+<tr>
+<td style="padding:10px; border:1px solid #444;"><code>rex mode autonomous</code></td>
+<td style="padding:10px; border:1px solid #444;">تغییر آنی سطح دسترسی به خودمختار کامل</td>
+</tr>
+<tr>
+<td style="padding:10px; border:1px solid #444;"><code>rex status</code></td>
+<td style="padding:10px; border:1px solid #444;">مشاهده وضعیت زنده دیمون سرور</td>
+</tr>
+<tr>
+<td style="padding:10px; border:1px solid #444;"><code>rex logs</code></td>
+<td style="padding:10px; border:1px solid #444;">مشاهده آنلاین لاگ‌های اتصال ایجنت</td>
+</tr>
+<tr>
+<td style="padding:10px; border:1px solid #444;"><code>rex uninstall</code></td>
+<td style="padding:10px; border:1px solid #444;">حذف کامل و بی‌اثر ساختن REX از روی سرور</td>
+</tr>
+</tbody>
+</table>
+
+---
+
+## 📄 لایسنس
+پروژه REX تحت لایسنس **MIT** منتشر شده است.
+
+</div>

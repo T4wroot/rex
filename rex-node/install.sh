@@ -6,12 +6,14 @@ set -e
 
 TOKEN=""
 PORT="7443"
+MODE="autonomous"
 
 # Parse optional args
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --token) TOKEN="$2"; shift 2 ;;
     --port)  PORT="$2";  shift 2 ;;
+    --mode)  MODE="$2";  shift 2 ;;
     *) shift ;;
   esac
 done
@@ -46,7 +48,7 @@ curl -L -f -s -S "$DOWNLOAD_URL" -o /usr/local/bin/rex-node.tmp
 chmod +x /usr/local/bin/rex-node.tmp
 mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
 
-# 2. Write Config
+# Write Config
 cat > /etc/rex/config.yaml << EOF
 token: "${TOKEN}"
 port: ${PORT}
@@ -55,21 +57,22 @@ allowlist: /etc/rex/allowlist.yaml
 log_level: info
 EOF
 
-# 3. Write Default Allowlist (Autonomous Mode)
-if [[ ! -f /etc/rex/allowlist.yaml ]]; then
-cat > /etc/rex/allowlist.yaml << 'EOF'
-mode: "autonomous"
+# Write Default Allowlist
+cat > /etc/rex/allowlist.yaml << EOF
+mode: "${MODE}"
 denied_commands:
   - "rm -rf /"
   - "chmod -R 777 /"
   - "mkfs"
 EOF
-fi
 
-# 4. Setup CLI helper tool `/usr/local/bin/rex`
+# Setup CLI helper tool `/usr/local/bin/rex`
 cat > /usr/local/bin/rex << 'EOF'
 #!/bin/bash
 SERVER_IP=$(curl -s -4 --connect-timeout 3 ifconfig.me || hostname -I | awk '{print $1}')
+CONFIG_FILE="/etc/rex/config.yaml"
+ALLOWLIST_FILE="/etc/rex/allowlist.yaml"
+
 case "$1" in
   status)
     systemctl status rex-node --no-pager
@@ -89,22 +92,42 @@ case "$1" in
   logs)
     journalctl -u rex-node -f
     ;;
+  mode)
+    if [ -n "$2" ]; then
+      if [[ "$2" == "autonomous" || "$2" == "review" || "$2" == "allowlist" ]]; then
+        sed -i "s/^mode:.*/mode: \"$2\"/" "$ALLOWLIST_FILE"
+        systemctl restart rex-node
+        echo "🛡️ REX Security Mode updated to: $2 (Daemon restarted)"
+      else
+        echo "❌ Invalid mode. Choose from: autonomous | review | allowlist"
+      fi
+    else
+      CURRENT_MODE=$(grep "^mode:" "$ALLOWLIST_FILE" | awk '{print $2}' | tr -d '"')
+      echo "🛡️ Current REX Security Mode: ${CURRENT_MODE:-autonomous}"
+    fi
+    ;;
   config)
-    cat /etc/rex/config.yaml
+    echo "--- Config ($CONFIG_FILE) ---"
+    cat "$CONFIG_FILE"
+    echo ""
+    echo "--- Security Policy ($ALLOWLIST_FILE) ---"
+    cat "$ALLOWLIST_FILE"
     ;;
   token)
-    grep "token:" /etc/rex/config.yaml | awk '{print $2}'
+    grep "token:" "$CONFIG_FILE" | awk '{print $2}' | tr -d '"'
     ;;
   ip)
     echo "$SERVER_IP"
     ;;
   info)
-    TOKEN=$(grep "token:" /etc/rex/config.yaml | awk '{print $2}')
+    TOKEN=$(grep "token:" "$CONFIG_FILE" | awk '{print $2}' | tr -d '"')
+    MODE=$(grep "^mode:" "$ALLOWLIST_FILE" | awk '{print $2}' | tr -d '"')
     echo "=========================================="
-    echo " 📍 REX Node Info"
+    echo " 📍 REX Node Status & Info"
     echo "=========================================="
     echo " Server IP: $SERVER_IP"
     echo " Port:      7443"
+    echo " Mode:      ${MODE:-autonomous}"
     echo " Token:     $TOKEN"
     echo "=========================================="
     ;;
@@ -118,14 +141,20 @@ case "$1" in
     echo "🗑️ REX Node has been completely uninstalled and removed."
     ;;
   *)
-    echo "REX CLI Management Tool"
-    echo "Usage: rex {status|start|stop|restart|logs|info|token|ip|uninstall}"
+    echo "REX CLI Management Tool (v1.0.1)"
+    echo "Usage:"
+    echo "  rex mode {autonomous|review|allowlist}  Get/Set security mode"
+    echo "  rex info                                Display IP, port, mode & token"
+    echo "  rex status                              Check daemon status"
+    echo "  rex restart                             Restart daemon"
+    echo "  rex logs                                Stream live logs"
+    echo "  rex uninstall                           Remove REX completely"
     ;;
 esac
 EOF
 chmod +x /usr/local/bin/rex
 
-# 5. Setup Systemd Service
+# Setup Systemd Service
 cat > /etc/systemd/system/rex-node.service << EOF
 [Unit]
 Description=REX Node Daemon
@@ -152,12 +181,12 @@ echo " ✅ REX Node installed and running successfully!"
 echo "===================================================="
 echo " ├─ Server IP: ${SERVER_IP}"
 echo " ├─ Port:      ${PORT}"
+echo " ├─ Mode:      ${MODE}"
 echo " └─ Token:     ${TOKEN}"
 echo "===================================================="
-echo " 💡 Useful Commands:"
-echo "    • rex status    (Check node status)"
-echo "    • rex stop      (Stop node)"
-echo "    • rex restart   (Restart node)"
-echo "    • rex uninstall (Completely remove REX)"
-echo "    • rex info      (Print IP & Token)"
+echo " 💡 CLI Commands:"
+echo "    • rex mode autonomous   (Set mode: autonomous | review | allowlist)"
+echo "    • rex info              (Print IP, Port & Token)"
+echo "    • rex logs              (Stream live logs)"
+echo "    • rex uninstall         (Remove REX)"
 echo "===================================================="
