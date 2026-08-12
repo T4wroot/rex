@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Token         string `yaml:"token"`
 	Port          int    `yaml:"port"`
+	TCPPort       int    `yaml:"tcp_port"`
 	TLS           bool   `yaml:"tls"`
 	CertFile      string `yaml:"cert_file"`
 	KeyFile       string `yaml:"key_file"`
@@ -23,6 +24,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Port:          7443,
+		TCPPort:       7444,
 		TLS:           false,
 		AllowlistPath: "/etc/rex/allowlist.yaml",
 		LogLevel:      "info",

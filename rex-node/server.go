@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -36,6 +39,8 @@ func NewServer(cfg *Config, al *Allowlist) *Server {
 }
 
 func (s *Server) Start() error {
+	go s.StartTCP()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rex", s.handleConnection)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -44,12 +49,135 @@ func (s *Server) Start() error {
 	})
 
 	addr := fmt.Sprintf(":%d", s.cfg.Port)
-	log.Printf("[rex] listening on %s", addr)
+	log.Printf("[rex] WebSocket listening on %s", addr)
 
 	if s.cfg.TLS && s.cfg.CertFile != "" && s.cfg.KeyFile != "" {
 		return http.ListenAndServeTLS(addr, s.cfg.CertFile, s.cfg.KeyFile, mux)
 	}
 	return http.ListenAndServe(addr, mux)
+}
+
+func (s *Server) StartTCP() {
+	tcpAddr := fmt.Sprintf(":%d", s.cfg.TCPPort)
+	listener, err := net.Listen("tcp", tcpAddr)
+	if err != nil {
+		log.Printf("[rex-tcp] failed to listen on %s: %v", tcpAddr, err)
+		return
+	}
+	defer listener.Close()
+
+	log.Printf("[rex-tcp] RXP/2.0 Binary Server listening on %s", tcpAddr)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("[rex-tcp] accept error: %v", err)
+			continue
+		}
+		go s.handleTCPConn(conn)
+	}
+}
+
+func (s *Server) handleTCPConn(conn net.Conn) {
+	defer conn.Close()
+	remoteAddr := conn.RemoteAddr().String()
+	log.Printf("[rex-tcp] client connected: %s", remoteAddr)
+
+	var connMu sync.Mutex
+	ptyMgr := NewPTYManager(conn, &connMu)
+	defer ptyMgr.CloseAll()
+
+	authenticated := false
+
+	for {
+		frame, err := ReadFrame(conn)
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("[rex-tcp] read error (%s): %v", remoteAddr, err)
+			}
+			return
+		}
+
+		if !authenticated && frame.Opcode != OpAuthHandshake {
+			log.Printf("[rex-tcp] unauthenticated frame from %s", remoteAddr)
+			connMu.Lock()
+			_ = WriteFrame(conn, OpError, frame.StreamID, []byte("unauthenticated"))
+			connMu.Unlock()
+			return
+		}
+
+		switch frame.Opcode {
+		case OpAuthHandshake:
+			token := string(frame.Payload)
+			if token != s.cfg.Token {
+				log.Printf("[rex-tcp] auth failed for %s", remoteAddr)
+				connMu.Lock()
+				_ = WriteFrame(conn, OpError, frame.StreamID, []byte("invalid token"))
+				connMu.Unlock()
+				return
+			}
+			authenticated = true
+			connMu.Lock()
+			_ = WriteFrame(conn, OpAuthHandshake, frame.StreamID, []byte("RXP/2.0 OK"))
+			connMu.Unlock()
+			log.Printf("[rex-tcp] client authenticated (%s)", remoteAddr)
+
+		case OpPTYSpawn:
+			cols, rows := uint16(80), uint16(24)
+			if len(frame.Payload) >= 4 {
+				cols = binary.BigEndian.Uint16(frame.Payload[0:2])
+				rows = binary.BigEndian.Uint16(frame.Payload[2:4])
+			}
+			if err := ptyMgr.Spawn(frame.StreamID, cols, rows); err != nil {
+				connMu.Lock()
+				_ = WriteFrame(conn, OpError, frame.StreamID, []byte(err.Error()))
+				connMu.Unlock()
+			} else {
+				connMu.Lock()
+				_ = WriteFrame(conn, OpPTYSpawn, frame.StreamID, []byte("PTY_SPAWNED"))
+				connMu.Unlock()
+			}
+
+		case OpPTYData:
+			_ = ptyMgr.WriteStdin(frame.StreamID, frame.Payload)
+
+		case OpPTYResize:
+			if len(frame.Payload) >= 4 {
+				cols := binary.BigEndian.Uint16(frame.Payload[0:2])
+				rows := binary.BigEndian.Uint16(frame.Payload[2:4])
+				_ = ptyMgr.Resize(frame.StreamID, cols, rows)
+			}
+
+		case OpPTYClose:
+			ptyMgr.Close(frame.StreamID)
+
+		case OpNativeFileOp:
+			resBytes := HandleNativeFileOp(frame.Payload)
+			connMu.Lock()
+			_ = WriteFrame(conn, OpNativeFileOp, frame.StreamID, resBytes)
+			connMu.Unlock()
+
+		case OpNativeSysInfo:
+			info := collectSysinfo()
+			infoBytes, _ := json.Marshal(info)
+			connMu.Lock()
+			_ = WriteFrame(conn, OpNativeSysInfo, frame.StreamID, infoBytes)
+			connMu.Unlock()
+
+		case OpPing:
+			connMu.Lock()
+			_ = WriteFrame(conn, OpPong, frame.StreamID, frame.Payload)
+			connMu.Unlock()
+
+		case OpAgentGuide:
+			connMu.Lock()
+			_ = WriteFrame(conn, OpAgentGuide, frame.StreamID, []byte(REXProtocolRule))
+			connMu.Unlock()
+
+		default:
+			log.Printf("[rex-tcp] unknown opcode: 0x%02x", frame.Opcode)
+		}
+	}
 }
 
 func (s *Server) handleConnection(w http.ResponseWriter, r *http.Request) {

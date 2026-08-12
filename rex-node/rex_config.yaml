@@ -1,0 +1,6 @@
+token: "rex-agent-secret-token"
+port: 7443
+tcp_port: 7444
+tls: false
+allowlist: "allowlist.yaml"
+log_level: info

@@ -9,8 +9,12 @@ import ssl
 import uuid
 from typing import AsyncIterator, Optional
 
-import websockets
-from websockets.exceptions import ConnectionClosed
+try:
+    import websockets
+    from websockets.exceptions import ConnectionClosed
+except ImportError:
+    websockets = None
+    ConnectionClosed = Exception
 
 from rex_client.exceptions import (
     REXAuthError,
