@@ -6,12 +6,12 @@ import (
 	"os"
 )
 
-const version = "1.0.0"
+const version = "2.0.0"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Printf("rex-node v%s — Remote EXecution Protocol daemon", version)
-	log.Printf("Protocol: RXP/1.0")
+	log.Printf("Protocol: RXP/2.0")
 
 	configPath := flag.String("config", getEnvOrDefault("REX_CONFIG", "/etc/rex/config.yaml"), "Path to config file")
 	flag.Parse()

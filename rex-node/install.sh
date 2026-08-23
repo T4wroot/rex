@@ -6,14 +6,16 @@ set -e
 
 TOKEN=""
 PORT="7443"
+TCP_PORT="7444"
 MODE="autonomous"
 
 # Parse optional args
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --token) TOKEN="$2"; shift 2 ;;
-    --port)  PORT="$2";  shift 2 ;;
-    --mode)  MODE="$2";  shift 2 ;;
+    --token)    TOKEN="$2";    shift 2 ;;
+    --port)     PORT="$2";     shift 2 ;;
+    --tcp-port) TCP_PORT="$2"; shift 2 ;;
+    --mode)     MODE="$2";     shift 2 ;;
     *) shift ;;
   esac
 done
@@ -22,7 +24,7 @@ if [[ -z "$TOKEN" ]]; then
   TOKEN=$(openssl rand -hex 16 2>/dev/null || date +%s | md5sum | head -c 32)
 fi
 
-echo "⚡ Installing REX Node Daemon..."
+echo "⚡ Installing REX Node Daemon (RXP/2.0 v2.0.0)..."
 
 # Check architecture
 ARCH=$(uname -m)
@@ -43,7 +45,7 @@ pkill -f rex-node 2>/dev/null || true
 rm -f /usr/local/bin/rex-node.tmp
 
 # Download pre-compiled binary safely via GitHub Release redirects
-DOWNLOAD_URL="https://github.com/T4wroot/rex/releases/download/v1.0.1/${BINARY_NAME}"
+DOWNLOAD_URL="https://github.com/T4wroot/rex/releases/download/v2.0.0/${BINARY_NAME}"
 curl -L -f -s -S "$DOWNLOAD_URL" -o /usr/local/bin/rex-node.tmp
 chmod +x /usr/local/bin/rex-node.tmp
 mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
@@ -52,6 +54,7 @@ mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
 cat > /etc/rex/config.yaml << EOF
 token: "${TOKEN}"
 port: ${PORT}
+tcp_port: ${TCP_PORT}
 tls: false
 allowlist: /etc/rex/allowlist.yaml
 log_level: info
