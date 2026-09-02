@@ -17,6 +17,6 @@ COPY --from=builder /app/rex-node /usr/local/bin/rex-node
 COPY rex-node/config.yaml /etc/rex/config.yaml
 COPY rex-node/allowlist.yaml /etc/rex/allowlist.yaml
 
-EXPOSE 7443
+EXPOSE 7443 7444
 ENTRYPOINT ["/usr/local/bin/rex-node"]
 CMD ["--config", "/etc/rex/config.yaml"]

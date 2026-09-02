@@ -1,4 +1,5 @@
-token: "rex-agent-secret-token"
+# Generate a deployment-specific token; never commit a real token here.
+token: "CHANGE_ME_GENERATE_A_UNIQUE_TOKEN"
 port: 7443
 tcp_port: 7444
 tls: false

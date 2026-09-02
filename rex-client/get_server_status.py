@@ -4,11 +4,14 @@ REX 2.0 Live Server Status Fetcher via RXPDirectClient (Raw TCP Socket)
 
 import asyncio
 import json
+import os
 from rex_client.direct_client import RXPDirectClient
 
 
 async def fetch_status():
-    token = "rex-agent-secret-token"
+    token = os.environ.get("REX_TOKEN")
+    if not token:
+        raise RuntimeError("Set REX_TOKEN to a deployment-specific token before running this example")
     host = "127.0.0.1"
     port = 7444
 

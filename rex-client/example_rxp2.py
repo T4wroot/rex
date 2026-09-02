@@ -3,13 +3,16 @@ Example usage and verification test for REX RXP/2.0 Direct TCP Protocol.
 """
 
 import asyncio
+import os
 import sys
 from rex_client.direct_client import RXPDirectClient
 
 
 async def test_direct_rxp():
     print("=== Testing REX RXP/2.0 Direct TCP Server Runtime ===")
-    token = "secret-token-123"
+    token = os.environ.get("REX_TOKEN")
+    if not token:
+        raise RuntimeError("Set REX_TOKEN to a deployment-specific token before running this example")
 
     try:
         async with RXPDirectClient("127.0.0.1", token=token, port=7444) as client:
