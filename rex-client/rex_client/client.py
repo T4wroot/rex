@@ -7,7 +7,7 @@ import json
 import logging
 import ssl
 import uuid
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, Union
 
 try:
     import websockets
@@ -75,7 +75,7 @@ class REXClient:
 
     @property
     def is_connected(self) -> bool:
-        return self._ws is not None and not self._ws.closed
+        return self._ws is not None and not getattr(self._ws, "closed", False)
 
     async def connect(self) -> HandshakeInfo:
         """Open WebSocket connection and perform RXP handshake."""
@@ -136,7 +136,7 @@ class REXClient:
                 pass
             self._reader_task = None
 
-        if self._ws and not self._ws.closed:
+        if self._ws and not getattr(self._ws, "closed", False):
             await self._ws.close()
         self._ws = None
         logger.info("Disconnected from %s", self.host)
@@ -247,6 +247,116 @@ class REXClient:
             except Exception:
                 pass
 
+    async def write_file(
+        self,
+        remote_path: str,
+        content: Union[str, bytes],
+        mode: int = 0o644,
+        append: bool = False,
+        timeout: float = 30.0,
+    ) -> int:
+        """Write string or bytes directly to a remote file via REX native file protocol."""
+        self._ensure_connected()
+        import base64
+
+        if isinstance(content, str):
+            content_bytes = content.encode("utf-8")
+        else:
+            content_bytes = content
+
+        b64_data = base64.b64encode(content_bytes).decode("ascii")
+        msg_id = _new_id("fwr")
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        self._pending[msg_id] = future
+
+        await self._send({
+            "type": "file_write",
+            "id": msg_id,
+            "path": remote_path,
+            "data": b64_data,
+            "mode": mode,
+            "append": append,
+        })
+
+        try:
+            response = await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(msg_id, None)
+            raise REXTimeout(f"write_file timed out for {remote_path}")
+
+        # If server is older REX 1.0 (returns unknown type: file_write), fallback gracefully!
+        if response.get("type") == "error" and "unknown type" in response.get("error", ""):
+            logger.info("Server does not support native file_write; using chunked pipe fallback")
+            return await self._fallback_write_file(remote_path, content_bytes, mode=mode, append=append)
+
+        if response.get("status") != "ok":
+            raise REXProtocolError(f"file_write failed: {response.get('error')}")
+
+        return response.get("bytes_written", len(content_bytes))
+
+    async def _fallback_write_file(self, remote_path: str, data: bytes, mode: int = 0o644, append: bool = False) -> int:
+        """Fallback chunked write using base64 for legacy REX nodes without native file_write."""
+        import base64
+        chunk_size = 4096
+        # If not appending, truncate file first
+        if not append:
+            await self.exec(f": > '{remote_path}'")
+
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
+            b64_chunk = base64.b64encode(chunk).decode("ascii")
+            cmd = f"printf '%s' '{b64_chunk}' | base64 -d >> '{remote_path}'"
+            res = await self.exec(cmd, timeout=10)
+            if res.exit_code != 0:
+                raise REXProtocolError(f"Fallback write failed: {res.stderr}")
+
+        await self.exec(f"chmod {oct(mode)[2:]} '{remote_path}'")
+        return len(data)
+
+    async def read_file(self, remote_path: str, timeout: float = 30.0) -> bytes:
+        """Read a file directly from remote server."""
+        self._ensure_connected()
+        import base64
+        msg_id = _new_id("frd")
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        self._pending[msg_id] = future
+
+        await self._send({
+            "type": "file_read",
+            "id": msg_id,
+            "path": remote_path,
+        })
+
+        try:
+            response = await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(msg_id, None)
+            raise REXTimeout(f"read_file timed out for {remote_path}")
+
+        if response.get("type") == "error" and "unknown type" in response.get("error", ""):
+            res = await self.exec(f"base64 '{remote_path}'")
+            if res.exit_code != 0:
+                raise REXProtocolError(f"read_file fallback failed: {res.stderr}")
+            return base64.b64decode(res.stdout.strip())
+
+        if response.get("status") != "ok":
+            raise REXProtocolError(f"read_file failed: {response.get('error')}")
+
+        return base64.b64decode(response.get("data", ""))
+
+    async def upload_file(self, local_path: str, remote_path: str, mode: int = 0o644, timeout: float = 60.0) -> int:
+        """Upload a local file to remote server."""
+        with open(local_path, "rb") as f:
+            data = f.read()
+        return await self.write_file(remote_path, data, mode=mode, timeout=timeout)
+
+    async def download_file(self, remote_path: str, local_path: str, timeout: float = 60.0) -> int:
+        """Download a remote file to local machine."""
+        data = await self.read_file(remote_path, timeout=timeout)
+        with open(local_path, "wb") as f:
+            f.write(data)
+        return len(data)
+
     async def ping(self) -> float:
         """Ping remote node and return RTT in milliseconds."""
         self._ensure_connected()
@@ -286,7 +396,7 @@ class REXClient:
                 msg_type = msg.get("type", "")
                 msg_id = msg.get("id", "")
 
-                if msg_type in ("exec_result", "sysinfo_result", "pong", "error"):
+                if msg_type in ("exec_result", "sysinfo_result", "file_write_result", "file_read_result", "pong", "error"):
                     self._resolve_future(msg_id, msg)
 
                 elif msg_type == "stream_line":

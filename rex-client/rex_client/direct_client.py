@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 import struct
-from typing import AsyncIterator, Callable, Dict, Optional
+from typing import AsyncIterator, Callable, Dict, Optional, Union
 
 from rex_client.protocol import (
     OP_AGENT_GUIDE,
@@ -47,11 +47,15 @@ class RXPDirectClient:
         host: str,
         token: str,
         port: int = 7444,
+        tls: bool = False,
+        tls_verify: bool = True,
         timeout: float = 30.0,
     ):
         self.host = host
         self.port = port
         self.token = token
+        self.tls = tls
+        self.tls_verify = tls_verify
         self.timeout = timeout
 
         self._reader: Optional[asyncio.StreamReader] = None
@@ -71,8 +75,16 @@ class RXPDirectClient:
         if self.is_connected:
             return
 
-        logger.info(f"Connecting to REX Server runtime at {self.host}:{self.port} (RXP/2.0)")
-        self._reader, self._writer = await asyncio.open_connection(self.host, self.port)
+        ssl_ctx = None
+        if self.tls:
+            import ssl
+            ssl_ctx = ssl.create_default_context()
+            if not self.tls_verify:
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+
+        logger.info(f"Connecting to REX Server runtime at {self.host}:{self.port} (RXP/2.0, TLS={self.tls})")
+        self._reader, self._writer = await asyncio.open_connection(self.host, self.port, ssl=ssl_ctx)
 
         # Send AUTH_HANDSHAKE frame
         frame = RXPFrame(
@@ -213,6 +225,38 @@ class RXPDirectClient:
 
         res_frame = await asyncio.wait_for(fut, timeout=self.timeout)
         return res_frame.payload.decode("utf-8")
+
+    async def write_file(self, remote_path: str, content: Union[str, bytes], mode: int = 0o644) -> dict:
+        """Write content directly to remote file via native OS syscall."""
+        if isinstance(content, str):
+            content_bytes = content.encode("utf-8")
+        else:
+            content_bytes = content
+        return await self.native_file_op("write", remote_path, content=content_bytes, mode=mode)
+
+    async def read_file(self, remote_path: str) -> bytes:
+        """Read content directly from remote file via native OS syscall."""
+        res = await self.native_file_op("read", remote_path)
+        if res.get("status") != "ok":
+            raise RuntimeError(f"read_file failed: {res.get('error')}")
+        raw = res.get("content", "")
+        if isinstance(raw, str):
+            import base64
+            return base64.b64decode(raw)
+        return bytes(raw)
+
+    async def upload_file(self, local_path: str, remote_path: str, mode: int = 0o644) -> dict:
+        """Upload a local file to remote server via native syscall."""
+        with open(local_path, "rb") as f:
+            data = f.read()
+        return await self.write_file(remote_path, data, mode=mode)
+
+    async def download_file(self, remote_path: str, local_path: str) -> int:
+        """Download a remote file to local machine via native syscall."""
+        data = await self.read_file(remote_path)
+        with open(local_path, "wb") as f:
+            f.write(data)
+        return len(data)
 
     async def _send_frame(self, frame: RXPFrame):
         if not self.is_connected or not self._writer:

@@ -46,7 +46,24 @@ rm -f /usr/local/bin/rex-node.tmp
 
 # Download pre-compiled binary safely via GitHub Release redirects
 DOWNLOAD_URL="https://github.com/T4wroot/rex/releases/download/v2.0.0/${BINARY_NAME}"
+CHECKSUM_URL="https://github.com/T4wroot/rex/releases/download/v2.0.0/${BINARY_NAME}.sha256"
+
 curl -L -f -s -S "$DOWNLOAD_URL" -o /usr/local/bin/rex-node.tmp
+
+# Verify SHA-256 Checksum if available
+if curl -L -f -s "$CHECKSUM_URL" -o /tmp/rex-node.sha256 2>/dev/null; then
+  echo "🔒 Verifying release binary SHA-256 checksum..."
+  EXPECTED_HASH=$(cat /tmp/rex-node.sha256 | awk '{print $1}')
+  ACTUAL_HASH=$(sha256sum /usr/local/bin/rex-node.tmp | awk '{print $1}')
+  if [ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]; then
+    echo "❌ Integrity Error: SHA-256 Checksum verification failed!"
+    rm -f /usr/local/bin/rex-node.tmp /tmp/rex-node.sha256
+    exit 1
+  fi
+  echo "✅ Binary Checksum Verified."
+  rm -f /tmp/rex-node.sha256
+fi
+
 chmod +x /usr/local/bin/rex-node.tmp
 mv -f /usr/local/bin/rex-node.tmp /usr/local/bin/rex-node
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -59,14 +61,34 @@ func (s *Server) Start() error {
 
 func (s *Server) StartTCP() {
 	tcpAddr := fmt.Sprintf(":%d", s.cfg.TCPPort)
-	listener, err := net.Listen("tcp", tcpAddr)
-	if err != nil {
-		log.Printf("[rex-tcp] failed to listen on %s: %v", tcpAddr, err)
-		return
+	var listener net.Listener
+	var err error
+
+	if s.cfg.TLS && s.cfg.CertFile != "" && s.cfg.KeyFile != "" {
+		cert, errTls := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
+		if errTls != nil {
+			log.Printf("[rex-tcp] TLS error loading cert: %v", errTls)
+			return
+		}
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS13,
+		}
+		listener, err = tls.Listen("tcp", tcpAddr, tlsConfig)
+		if err != nil {
+			log.Printf("[rex-tcp] TLS listen error on %s: %v", tcpAddr, err)
+			return
+		}
+		log.Printf("[rex-tcp] RXP/2.0 TLS 1.3 Binary Server listening on %s", tcpAddr)
+	} else {
+		log.Printf("[rex-tcp] WARNING: Plaintext TCP listening on %s (TLS disabled)", tcpAddr)
+		listener, err = net.Listen("tcp", tcpAddr)
+		if err != nil {
+			log.Printf("[rex-tcp] failed to listen on %s: %v", tcpAddr, err)
+			return
+		}
 	}
 	defer listener.Close()
-
-	log.Printf("[rex-tcp] RXP/2.0 Binary Server listening on %s", tcpAddr)
 
 	for {
 		conn, err := listener.Accept()
@@ -123,6 +145,17 @@ func (s *Server) handleTCPConn(conn net.Conn) {
 			log.Printf("[rex-tcp] client authenticated (%s)", remoteAddr)
 
 		case OpPTYSpawn:
+			if s.allowlist != nil {
+				allowed, reason := s.allowlist.IsCommandAllowed("bash")
+				if !allowed {
+					log.Printf("[rex-tcp] PTY spawn denied for %s: %s", remoteAddr, reason)
+					connMu.Lock()
+					_ = WriteFrame(conn, OpError, frame.StreamID, []byte("PTY spawn denied: "+reason))
+					connMu.Unlock()
+					continue
+				}
+			}
+
 			cols, rows := uint16(80), uint16(24)
 			if len(frame.Payload) >= 4 {
 				cols = binary.BigEndian.Uint16(frame.Payload[0:2])
@@ -152,7 +185,7 @@ func (s *Server) handleTCPConn(conn net.Conn) {
 			ptyMgr.Close(frame.StreamID)
 
 		case OpNativeFileOp:
-			resBytes := HandleNativeFileOp(frame.Payload)
+			resBytes := HandleNativeFileOp(frame.Payload, s.allowlist)
 			connMu.Lock()
 			_ = WriteFrame(conn, OpNativeFileOp, frame.StreamID, resBytes)
 			connMu.Unlock()
@@ -304,6 +337,12 @@ func (s *Server) handleSession(conn *websocket.Conn, remoteAddr string) {
 		case "sysinfo":
 			go s.handleSysinfo(conn, &mu, msgID)
 
+		case "file_write":
+			go s.handleFileWrite(conn, &mu, msg, msgID)
+
+		case "file_read":
+			go s.handleFileRead(conn, &mu, msg, msgID)
+
 		case "ping":
 			_ = sendJSON(conn, &mu, map[string]interface{}{
 				"type": "pong",
@@ -348,6 +387,104 @@ func (s *Server) handleSysinfo(conn *websocket.Conn, mu sync.Locker, id string) 
 	info["type"] = "sysinfo_result"
 	info["id"] = id
 	_ = sendJSON(conn, mu, info)
+}
+
+func (s *Server) handleFileWrite(conn *websocket.Conn, mu sync.Locker, msg map[string]interface{}, id string) {
+	path, _ := msg["path"].(string)
+	dataStr, _ := msg["data"].(string)
+	appendMode, _ := msg["append"].(bool)
+	modeVal := 0644
+	if m, ok := msg["mode"].(float64); ok && m > 0 {
+		modeVal = int(m)
+	}
+
+	if s.allowlist != nil {
+		allowed, reason := s.allowlist.IsCommandAllowed(fmt.Sprintf("write %s", path))
+		if !allowed {
+			_ = sendJSON(conn, mu, map[string]interface{}{
+				"type":   "file_write_result",
+				"id":     id,
+				"status": "error",
+				"error":  "security policy denied: " + reason,
+			})
+			return
+		}
+	}
+
+	data, err := base64.StdEncoding.DecodeString(dataStr)
+	if err != nil {
+		data = []byte(dataStr)
+	}
+
+	flags := os.O_CREATE | os.O_WRONLY
+	if appendMode {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
+	}
+
+	f, err := os.OpenFile(path, flags, os.FileMode(modeVal))
+	if err != nil {
+		_ = sendJSON(conn, mu, map[string]interface{}{
+			"type":   "file_write_result",
+			"id":     id,
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+	defer f.Close()
+
+	n, err := f.Write(data)
+	if err != nil {
+		_ = sendJSON(conn, mu, map[string]interface{}{
+			"type":   "file_write_result",
+			"id":     id,
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	_ = sendJSON(conn, mu, map[string]interface{}{
+		"type":          "file_write_result",
+		"id":            id,
+		"status":        "ok",
+		"bytes_written": n,
+	})
+}
+
+func (s *Server) handleFileRead(conn *websocket.Conn, mu sync.Locker, msg map[string]interface{}, id string) {
+	path, _ := msg["path"].(string)
+
+	if s.allowlist != nil && s.allowlist.Mode == LevelAllowlist && !s.allowlist.IsPathAllowed(path) {
+		_ = sendJSON(conn, mu, map[string]interface{}{
+			"type":   "file_read_result",
+			"id":     id,
+			"status": "error",
+			"error":  "access to path denied by allowlist policy",
+		})
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		_ = sendJSON(conn, mu, map[string]interface{}{
+			"type":   "file_read_result",
+			"id":     id,
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	_ = sendJSON(conn, mu, map[string]interface{}{
+		"type":   "file_read_result",
+		"id":     id,
+		"status": "ok",
+		"data":   base64.StdEncoding.EncodeToString(data),
+		"size":   len(data),
+	})
 }
 
 func sendJSON(conn *websocket.Conn, mu interface{ Lock(); Unlock() }, v interface{}) error {

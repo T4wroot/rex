@@ -37,11 +37,23 @@ type FileStat struct {
 	IsDir   bool   `json:"is_dir"`
 }
 
-// HandleNativeFileOp executes direct OS syscalls for file management
-func HandleNativeFileOp(payload []byte) []byte {
+// HandleNativeFileOp executes direct OS syscalls for file management with security checks
+func HandleNativeFileOp(payload []byte, al *Allowlist) []byte {
 	var req NativeFileReq
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return makeErrRes(fmt.Sprintf("invalid payload: %v", err))
+	}
+
+	if al != nil {
+		if req.Action == "write" || req.Action == "delete" {
+			cmdStr := fmt.Sprintf("%s %s", req.Action, req.Path)
+			allowed, reason := al.IsCommandAllowed(cmdStr)
+			if !allowed {
+				return makeErrRes(fmt.Sprintf("security policy denied %s: %s", req.Action, reason))
+			}
+		} else if !al.IsPathAllowed(req.Path) && al.Mode == LevelAllowlist {
+			return makeErrRes(fmt.Sprintf("access to path %q denied by allowlist policy", req.Path))
+		}
 	}
 
 	switch req.Action {
